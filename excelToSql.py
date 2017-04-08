@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 
+import sys
 import pymysql.cursors
 from PyQt5.QtWidgets import *
+from PyQt5.QtCore import Qt
 
 
-class MainWindow(QDialog):
+class MainWidget(QWidget):
+
+    popups = []
 
     def __init__(self):
-        super(MainWindow, self).__init__()
+        super(MainWidget, self).__init__()
         self.resize(800, 600)
 
-        self.leDBName = QLineEditUrl("nazwa połączenia ODBC", "MIS")
+        self.cbxODBCName = QComboBox()
         self.btnReadData = QPushButton("Pobierz listę tabel")
         self.btnReadData.clicked.connect(self.get_data)
         self.twTables = QTreeWidget()
@@ -21,7 +25,7 @@ class MainWindow(QDialog):
 
         gbDB = QGroupBox()
         gbDBLayout = QVBoxLayout()
-        gbDBLayout.addWidget(self.leDBName)
+        gbDBLayout.addWidget(self.cbxODBCName)
         gbDBLayout.addWidget(self.btnReadData)
         gbDBLayout.addWidget(self.twTables)
         gbDB.setLayout(gbDBLayout)
@@ -35,15 +39,20 @@ class MainWindow(QDialog):
         mainLayout.addWidget(gbDB)
         mainLayout.addWidget(gbFile)
 
+        self.read_settings()
+
     def read_settings(self):
         try:
-            with open("./settings", "r") as file:
+            with open("settings", "r") as file:
                 file_str = file.read()
             dbs = file_str.split("\n")
-            dbs.remove("")
-        except IOerror:
-            print("Plik settings nie znajduje się w tej samej lokalizacji, \
-                  co aplikacja.")
+            dbs = [db for db in dbs if db != ""]
+            self.cbxODBCName.addItems(dbs)
+        except IOError as err:
+            error_message = "Plik settings nie znajduje się w tej samej"
+            " lokalizacji, co aplikacja. \n" + str(err)
+            self.popups.append(PopupError(error_message=str(error_message)))
+            self.popups[-1].show()
 
     def get_data(self):
         connection = pymysql.connect(host='localhost',
@@ -116,10 +125,27 @@ class QLineEditUrl(QLineEdit):
                 self.setText(url)
 
 
+class PopupError(QWidget):
+
+    def __init__(self, error_message=""):
+        QWidget.__init__(self)
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.resize(300, 100)
+        self.setWindowTitle(r"Błąd!")
+
+        lbl = QLabel()
+        lbl.setText(error_message)
+
+        btn = QPushButton("OK")
+        btn.clicked.connect(self.close)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(lbl)
+        layout.addWidget(btn)
+
 if __name__ == '__main__':
 
-    import sys
-
     app = QApplication(sys.argv)
-    mw = MainWindow()
-    sys.exit(mw.exec_())
+    mw = MainWidget()
+    mw.show()
+    app.exec_()
