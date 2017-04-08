@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import csv
 import pymysql.cursors
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt
@@ -9,33 +10,42 @@ from PyQt5.QtCore import Qt
 class MainWidget(QWidget):
 
     popups = []
+    file_data = set()
 
     def __init__(self):
         super(MainWidget, self).__init__()
         self.resize(800, 600)
 
         self.cbxODBCName = QComboBox()
-        self.btnReadData = QPushButton("Pobierz listę tabel")
-        self.btnReadData.clicked.connect(self.get_data)
+        self.btnGetTablesList = QPushButton("Pobierz listę tabel")
+        self.btnGetTablesList.clicked.connect(self.get_tables_list)
         self.twTables = QTreeWidget()
         self.twTables.setColumnCount(2)
         self.twTables.setHeaderLabels(["tabele", "typ danych"])
 
         self.leFileName = QLineEditUrl("lokalizacja pliku")
         self.btnOpenFile = QPushButton("...")
-        self.btnOpenFile.clicked.connect(self.show_dialog)
+        self.btnOpenFile.clicked.connect(self.show_file_dialog)
+        self.btnReadFileData = QPushButton("Wczytaj plik")
+        self.btnReadFileData.clicked.connect(self.read_file_data)
+        self.btnSendFileData = QPushButton("Wyślij dane")
+        self.btnSendFileData .clicked.connect(self.send_file_data)
 
         gbDB = QGroupBox()
         gbDBLayout = QVBoxLayout()
         gbDBLayout.addWidget(self.cbxODBCName)
-        gbDBLayout.addWidget(self.btnReadData)
+        gbDBLayout.addWidget(self.btnGetTablesList)
         gbDBLayout.addWidget(self.twTables)
         gbDB.setLayout(gbDBLayout)
 
         gbFile = QGroupBox()
         gbFileLayout = QVBoxLayout()
-        gbFileLayout.addWidget(self.leFileName)
-        gbFileLayout.addWidget(self.btnOpenFile)
+        gbFileUrlLayout = QHBoxLayout()
+        gbFileUrlLayout.addWidget(self.leFileName)
+        gbFileUrlLayout.addWidget(self.btnOpenFile)
+        gbFileLayout.addLayout(gbFileUrlLayout)
+        gbFileLayout.addWidget(self.btnReadFileData)
+        gbFileLayout.addWidget(self.btnSendFileData)
         gbFile.setLayout(gbFileLayout)
 
         mainLayout = QHBoxLayout(self)
@@ -57,7 +67,7 @@ class MainWidget(QWidget):
             self.popups.append(PopupError(error_message=str(error_message)))
             self.popups[-1].show()
 
-    def get_data(self):
+    def get_tables_list(self):
         """
         pobiera listę tabel ze wskazanej bazy danych
         """
@@ -95,10 +105,21 @@ class MainWidget(QWidget):
         else:
             connection.close()
 
-    def show_dialog(self):
+    def show_file_dialog(self):
         file_name = QFileDialog.getOpenFileName(self, 'Otwórz plik',
                                                 '/home/tomek')
         self.leFileName.setText(file_name[0])
+
+    def read_file_data(self):
+        path = self.leFileName.text()
+        with open(path, "r") as file:
+            rdr = csv.reader(file, delimiter=';')
+            for row in rdr:
+                self.file_data.add(tuple(row))
+
+    def send_file_data(self):
+        # wątek.start()
+        pass
 
 
 class AutoVivification(dict):
