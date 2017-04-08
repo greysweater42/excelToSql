@@ -50,18 +50,23 @@ class MainWidget(QWidget):
             self.cbxODBCName.addItems(dbs)
         except IOError as err:
             error_message = "Plik settings nie znajduje się w tej samej"
-            " lokalizacji, co aplikacja. \n" + str(err)
+            error_message += " lokalizacji, co aplikacja. \n" + str(err)
             self.popups.append(PopupError(error_message=str(error_message)))
             self.popups[-1].show()
 
     def get_data(self):
-        connection = pymysql.connect(host='localhost',
-                                     user='tomek',
-                                     password='haslo',
-                                     db='MIS',
-                                     charset='utf8mb4',
-                                     cursorclass=pymysql.cursors.DictCursor)
+        """
+        pobiera listę tabel ze wskazanej bazy danych
+        """
+        self.twTables.clear()
+        db = self.cbxODBCName.currentText()
         try:
+            connection = pymysql.connect(host='localhost',
+                                         user='tomek',
+                                         password='haslo',
+                                         db=db,
+                                         charset='utf8mb4',
+                                         cursorclass=pymysql.cursors.DictCursor)
             with connection.cursor() as cursor:
                 sql = """
                 SELECT table_name, column_name, data_type
@@ -81,7 +86,10 @@ class MainWidget(QWidget):
                                                         result[table][column]])
                         table_item.addChild(column_child)
                     self.twTables.addTopLevelItem(table_item)
-        finally:
+        except (pymysql.err.InternalError, pymysql.err.OperationalError) as err:
+            self.popups.append(PopupError(error_message=str(err)))
+            self.popups[-1].show()
+        else:
             connection.close()
 
 
@@ -143,8 +151,8 @@ class PopupError(QWidget):
         layout.addWidget(lbl)
         layout.addWidget(btn)
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     app = QApplication(sys.argv)
     mw = MainWidget()
     mw.show()
