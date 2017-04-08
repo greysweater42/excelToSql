@@ -4,13 +4,14 @@ import sys
 import csv
 import pymysql.cursors
 from PyQt5.QtWidgets import *
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread
 
 
 class MainWidget(QWidget):
 
     popups = []
     file_data = set()
+    file_data_header = []
 
     def __init__(self):
         super(MainWidget, self).__init__()
@@ -53,6 +54,7 @@ class MainWidget(QWidget):
         mainLayout.addWidget(gbFile)
 
         self.read_settings()
+        self.dataSender = DataSender(self)
 
     def read_settings(self):
         try:
@@ -97,6 +99,7 @@ class MainWidget(QWidget):
                     for column in result[table]:
                         column_child = QTreeWidgetItem([column,
                                                         result[table][column]])
+                        column_child.setDisabled(True)
                         table_item.addChild(column_child)
                     self.twTables.addTopLevelItem(table_item)
         except (pymysql.err.InternalError, pymysql.err.OperationalError) as err:
@@ -113,13 +116,18 @@ class MainWidget(QWidget):
     def read_file_data(self):
         path = self.leFileName.text()
         with open(path, "r") as file:
-            rdr = csv.reader(file, delimiter=';')
+            rdr = csv.reader(file, delimiter=',')
+            self.file_data_header = next(rdr)
             for row in rdr:
                 self.file_data.add(tuple(row))
 
     def send_file_data(self):
-        # wątek.start()
-        pass
+        self.dataSender.db = self.cbxODBCName.currentText()
+        index = self.twTables.selectedIndexes()[0]
+        self.dataSender.table = index.data()
+        self.dataSender.file_data = self.file_data
+        self.dataSender.file_data_header = self.file_data_header
+        self.dataSender.start()
 
 
 class AutoVivification(dict):
@@ -179,6 +187,39 @@ class PopupError(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(lbl)
         layout.addWidget(btn)
+
+
+class DataSender(QThread):
+
+    def __init__(self, parent=None):
+        QThread.__init__(self)
+        self.parent = parent
+        self.db = ""
+        self.table = ""
+        self.file_data = ""
+        self.file_data_header = []
+
+    def __del__(self):
+        self.wait()
+
+    def run(self):
+        # Connect to the database
+        connection = pymysql.connect(host='localhost',
+                                     user='tomek',
+                                     password='haslo',
+                                     db=self.db,
+                                     charset='utf8mb4',
+                                     cursorclass=pymysql.cursors.DictCursor)
+
+        try:
+            with connection.cursor() as cursor:
+                sql = "insert into " + self.table + " values ("
+                sql += "'%s'," * (len(self.file_data_header) - 1) + "'%s');"
+                for row in self.file_data:
+                    cursor.execute(sql % row)
+                    connection.commit()
+        finally:
+            connection.close()
 
 
 if __name__ == '__main__':
