@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import pymysql.cursors
-from PyQt5.QtWidgets import QDialog, QPushButton, QLineEdit, QHBoxLayout, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QApplication, QGroupBox
+from PyQt5.QtWidgets import *
 
 
 class MainWindow(QDialog):
@@ -34,6 +34,16 @@ class MainWindow(QDialog):
         mainLayout = QHBoxLayout(self)
         mainLayout.addWidget(gbDB)
         mainLayout.addWidget(gbFile)
+
+    def read_settings(self):
+        try:
+            with open("./settings", "r") as file:
+                file_str = file.read()
+            dbs = file_str.split("\n")
+            dbs.remove("")
+        except IOerror:
+            print("Plik settings nie znajduje się w tej samej lokalizacji, \
+                  co aplikacja.")
 
     def get_data(self):
         connection = pymysql.connect(host='localhost',
