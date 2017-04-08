@@ -22,6 +22,8 @@ class MainWidget(QWidget):
         self.twTables.setHeaderLabels(["tabele", "typ danych"])
 
         self.leFileName = QLineEditUrl("lokalizacja pliku")
+        self.btnOpenFile = QPushButton("...")
+        self.btnOpenFile.clicked.connect(self.show_dialog)
 
         gbDB = QGroupBox()
         gbDBLayout = QVBoxLayout()
@@ -33,6 +35,7 @@ class MainWidget(QWidget):
         gbFile = QGroupBox()
         gbFileLayout = QVBoxLayout()
         gbFileLayout.addWidget(self.leFileName)
+        gbFileLayout.addWidget(self.btnOpenFile)
         gbFile.setLayout(gbFileLayout)
 
         mainLayout = QHBoxLayout(self)
@@ -91,6 +94,11 @@ class MainWidget(QWidget):
             self.popups[-1].show()
         else:
             connection.close()
+
+    def show_dialog(self):
+        file_name = QFileDialog.getOpenFileName(self, 'Otwórz plik',
+                                                '/home/tomek')
+        self.leFileName.setText(file_name[0])
 
 
 class AutoVivification(dict):
