@@ -118,11 +118,16 @@ class MainWidget(QWidget):
 
     def read_file_data(self):
         path = self.leFileName.text()
-        with open(path, "r") as file:
-            rdr = csv.reader(file, delimiter=',')
-            self.file_data_header = next(rdr)
-            for row in rdr:
-                self.file_data.add(tuple(row))
+        try:
+            with open(path, "r") as file:
+                rdr = csv.reader(file, delimiter=',')
+                self.file_data_header = next(rdr)
+                for row in rdr:
+                    self.file_data.add(tuple(row))
+        except FileNotFoundError as err:
+            error_message = "Nie znaleziono pliku.\n" + str(err)
+            self.popups.append(PopupError(error_message=error_message))
+            self.popups[-1].show()
 
     def send_file_data(self):
         self.dataSender.db = self.cbxODBCName.currentText()
