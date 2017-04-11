@@ -25,7 +25,8 @@ class MainWidget(QWidget):
         self.twTables.setColumnCount(2)
         self.twTables.setHeaderLabels(["tabele", "typ danych"])
 
-        self.leFileName = QLineEditUrl("lokalizacja pliku")
+        self.leFileName = QLineEditUrl("lokalizacja pliku",
+                                       "/home/tomek/Documents/nauka/python/excelToSql/data.csv")
         self.btnOpenFile = QPushButton("...")
         self.btnOpenFile.clicked.connect(self.show_file_dialog)
         self.btnReadFileData = QPushButton("Wczytaj plik")
@@ -124,6 +125,7 @@ class MainWidget(QWidget):
                 self.file_data_header = next(rdr)
                 for row in rdr:
                     self.file_data.add(tuple(row))
+            self.twTable.add_data(self.file_data_header, self.file_data)
         except FileNotFoundError as err:
             error_message = "Nie znaleziono pliku.\n" + str(err)
             self.popups.append(PopupError(error_message=error_message))
@@ -234,44 +236,57 @@ class TableWidget(QWidget):
 
     def __init__(self):
         super(TableWidget, self).__init__()
-        self.tw = QTableWidget(5, 2)
-        self.headerLabels = ['id', 'name']
-        self.tw.setHorizontalHeaderLabels(self.headerLabels)
+        self.tw = QTableWidget()
         self.tw.horizontalHeader().setSectionsMovable(True)
-        self.b = QPushButton("Usuń kolumnę")
-        self.b.clicked.connect(self.hide_column)
-        self.c = QPushButton("Przywróć kolumnę")
-        self.c.setEnabled(False)
+        self.btnRemove = QPushButton("Usuń kolumnę")
+        self.btnRemove .clicked.connect(self.hide_column)
+        self.btnUndelete = QPushButton("Przywróć kolumnę")
+        self.btnUndelete.setEnabled(False)
         self.m = QMenu()
-        self.c.setMenu(self.m)
-        l = QVBoxLayout(self)
-        lh = QHBoxLayout()
-        lh.addWidget(self.b)
-        lh.addWidget(self.c)
-        l.addLayout(lh)
-        l.addWidget(self.tw)
+        self.btnUndelete.setMenu(self.m)
+        lt = QVBoxLayout(self)
+        lth = QHBoxLayout()
+        lth.addWidget(self.btnRemove)
+        lth.addWidget(self.btnUndelete)
+        lt.addLayout(lth)
+        lt.addWidget(self.tw)
+        self.headerLabels = []
+        self.nrow = 0
+        self.ncol = 0
+
+    def add_data(self, header, data):
+        self.headerLabels = header
+        self.ncol = len(header)
+        self.nrow = len(data)
+        self.tw.setColumnCount(self.ncol)
+        self.tw.setRowCount(self.nrow)
+        self.tw.setHorizontalHeaderLabels(self.headerLabels)
+        for row, line in enumerate(data):
+            for column, item in enumerate(line):
+                qtwitem = QTableWidgetItem(str(item))
+                self.tw.setItem(row, column, qtwitem)
 
     def hide_column(self):
-        self.c.setEnabled(True)
+        self.btnUndelete.setEnabled(True)
         index = self.tw.currentColumn()
         if index == -1:
             return
         self.tw.horizontalHeader().setSectionHidden(index, True)
         self.m.addAction(self.headerLabels[index],
                          partial(self.show_column, index))
-        if self.tw.horizontalHeader().hiddenSectionCount() == len(self.headerLabels):
-            self.b.setEnabled(False)
+        if self.tw.horizontalHeader().hiddenSectionCount() == self.ncol:
+            self.btnRemove.setEnabled(False)
 
     def show_column(self, index):
-        self.b.setEnabled(True)
+        self.btnRemove.setEnabled(True)
         self.tw.horizontalHeader().setSectionHidden(index, False)
         self.m.clear()
-        for i in range(len(self.headerLabels)):
+        for i in range(self.ncol):
             if self.tw.horizontalHeader().isSectionHidden(i):
                 self.m.addAction(self.headerLabels[i],
                                  partial(self.show_column, i))
         if not self.tw.horizontalHeader().hiddenSectionCount():
-            self.c.setEnabled(False)
+            self.btnUndelete.setEnabled(False)
 
 
 if __name__ == '__main__':
