@@ -5,6 +5,7 @@ import csv
 import pymysql.cursors
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt, QThread
+from functools import partial
 
 
 class MainWidget(QWidget):
@@ -29,6 +30,7 @@ class MainWidget(QWidget):
         self.btnOpenFile.clicked.connect(self.show_file_dialog)
         self.btnReadFileData = QPushButton("Wczytaj plik")
         self.btnReadFileData.clicked.connect(self.read_file_data)
+        self.twTable = TableWidget()
         self.btnSendFileData = QPushButton("Wyślij dane")
         self.btnSendFileData .clicked.connect(self.send_file_data)
 
@@ -46,6 +48,7 @@ class MainWidget(QWidget):
         gbFileUrlLayout.addWidget(self.btnOpenFile)
         gbFileLayout.addLayout(gbFileUrlLayout)
         gbFileLayout.addWidget(self.btnReadFileData)
+        gbFileLayout.addWidget(self.twTable)
         gbFileLayout.addWidget(self.btnSendFileData)
         gbFile.setLayout(gbFileLayout)
 
@@ -220,6 +223,50 @@ class DataSender(QThread):
                     connection.commit()
         finally:
             connection.close()
+
+
+class TableWidget(QWidget):
+
+    def __init__(self):
+        super(TableWidget, self).__init__()
+        self.tw = QTableWidget(5, 2)
+        self.headerLabels = ['id', 'name']
+        self.tw.setHorizontalHeaderLabels(self.headerLabels)
+        self.tw.horizontalHeader().setSectionsMovable(True)
+        self.b = QPushButton("Usuń kolumnę")
+        self.b.clicked.connect(self.hide_column)
+        self.c = QPushButton("Przywróć kolumnę")
+        self.c.setEnabled(False)
+        self.m = QMenu()
+        self.c.setMenu(self.m)
+        l = QVBoxLayout(self)
+        lh = QHBoxLayout()
+        lh.addWidget(self.b)
+        lh.addWidget(self.c)
+        l.addLayout(lh)
+        l.addWidget(self.tw)
+
+    def hide_column(self):
+        self.c.setEnabled(True)
+        index = self.tw.currentColumn()
+        if index == -1:
+            return
+        self.tw.horizontalHeader().setSectionHidden(index, True)
+        self.m.addAction(self.headerLabels[index],
+                         partial(self.show_column, index))
+        if self.tw.horizontalHeader().hiddenSectionCount() == len(self.headerLabels):
+            self.b.setEnabled(False)
+
+    def show_column(self, index):
+        self.b.setEnabled(True)
+        self.tw.horizontalHeader().setSectionHidden(index, False)
+        self.m.clear()
+        for i in range(len(self.headerLabels)):
+            if self.tw.horizontalHeader().isSectionHidden(i):
+                self.m.addAction(self.headerLabels[i],
+                                 partial(self.show_column, i))
+        if not self.tw.horizontalHeader().hiddenSectionCount():
+            self.c.setEnabled(False)
 
 
 if __name__ == '__main__':
