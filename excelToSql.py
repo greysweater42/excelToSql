@@ -11,12 +11,11 @@ from functools import partial
 class MainWidget(QWidget):
 
     popups = []
-    file_data = set()
-    file_data_header = []
 
     def __init__(self):
         super(MainWidget, self).__init__()
         self.resize(800, 600)
+        self.fileData = FileData()
 
         self.cbxODBCName = QComboBox()
         self.btnGetTablesList = QPushButton("Pobierz listę tabel")
@@ -25,8 +24,9 @@ class MainWidget(QWidget):
         self.twTables.setColumnCount(2)
         self.twTables.setHeaderLabels(["tabele", "typ danych"])
 
-        self.leFileName = QLineEditUrl("lokalizacja pliku",
-                                       "/home/tomek/Documents/nauka/python/excelToSql/data.csv")
+        path = "/home/tomek/Documents/nauka/python/excelToSql/data.csv"
+
+        self.leFileName = QLineEditUrl("lokalizacja pliku", path)
         self.btnOpenFile = QPushButton("...")
         self.btnOpenFile.clicked.connect(self.show_file_dialog)
         self.btnReadFileData = QPushButton("Wczytaj plik")
@@ -119,13 +119,15 @@ class MainWidget(QWidget):
 
     def read_file_data(self):
         path = self.leFileName.text()
+        file_data = set()
         try:
             with open(path, "r") as file:
                 rdr = csv.reader(file, delimiter=',')
-                self.file_data_header = next(rdr)
+                header = next(rdr)
                 for row in rdr:
-                    self.file_data.add(tuple(row))
-            self.twTable.add_data(self.file_data_header, self.file_data)
+                    file_data.add(tuple(row))
+            self.fileData = FileData(header, file_data)
+            self.twTable.set_file_data(self.fileData)
         except FileNotFoundError as err:
             error_message = "Nie znaleziono pliku.\n" + str(err)
             self.popups.append(PopupError(error_message=error_message))
@@ -134,9 +136,8 @@ class MainWidget(QWidget):
     def send_file_data(self):
         self.dataSender.db = self.cbxODBCName.currentText()
         index = self.twTables.selectedIndexes()[0]
-        self.dataSender.table = index.data()
-        self.dataSender.file_data = self.file_data
-        self.dataSender.file_data_header = self.file_data_header
+        self.dataSender.dbtable = index.data()
+        self.dataSender.fileData = self.fileData
         self.dataSender.start()
 
 
@@ -202,33 +203,35 @@ class PopupError(QWidget):
 class DataSender(QThread):
 
     def __init__(self, parent=None):
-        QThread.__init__(self)
-        self.parent = parent
+        super(DataSender, self).__init__(parent)
         self.db = ""
-        self.table = ""
-        self.file_data = ""
-        self.file_data_header = []
-
-    def __del__(self):
-        self.wait()
+        self.dbtable = ""
+        self.fileData = FileData()
 
     def run(self):
-        # Connect to the database
         connection = pymysql.connect(host='localhost',
                                      user='tomek',
                                      password='haslo',
                                      db=self.db,
                                      charset='utf8mb4',
                                      cursorclass=pymysql.cursors.DictCursor)
-
         try:
             with connection.cursor() as cursor:
-                sql = "insert into " + self.table + " values ("
-                sql += "'%s'," * (len(self.file_data_header) - 1) + "'%s');"
-                for row in self.file_data:
-                    cursor.execute(sql % row)
-                    connection.commit()
-        finally:
+                sql = "insert into " + self.dbtable + " values "
+                for count, row in enumerate(self.fileData.data):
+                    sql += "(" + "'%s'," * (self.fileData.ncol - 1) + "'%s'),"
+                    sql = sql % row
+                    if not count % 50 or count == self.fileData.nrow - 1:
+                        sql = sql[:-1] + ";"
+                        print(sql)
+                        cursor.execute(sql)
+                        connection.commit()
+                        sql = "insert into " + self.dbtable + " values "
+
+        except (pymysql.err.InternalError, pymysql.err.OperationalError) as err:
+            self.popups.append(PopupError(error_message=str(err)))
+            self.popups[-1].show()
+        else:
             connection.close()
 
 
@@ -236,6 +239,7 @@ class TableWidget(QWidget):
 
     def __init__(self):
         super(TableWidget, self).__init__()
+        self.fileData = FileData()
         self.tw = QTableWidget()
         self.tw.horizontalHeader().setSectionsMovable(True)
         self.btnRemove = QPushButton("Usuń kolumnę")
@@ -250,18 +254,13 @@ class TableWidget(QWidget):
         lth.addWidget(self.btnUndelete)
         lt.addLayout(lth)
         lt.addWidget(self.tw)
-        self.headerLabels = []
-        self.nrow = 0
-        self.ncol = 0
 
-    def add_data(self, header, data):
-        self.headerLabels = header
-        self.ncol = len(header)
-        self.nrow = len(data)
-        self.tw.setColumnCount(self.ncol)
-        self.tw.setRowCount(self.nrow)
-        self.tw.setHorizontalHeaderLabels(self.headerLabels)
-        for row, line in enumerate(data):
+    def set_file_data(self, fileData):
+        self.fileData = fileData
+        self.tw.setColumnCount(self.fileData.ncol)
+        self.tw.setRowCount(self.fileData.nrow)
+        self.tw.setHorizontalHeaderLabels(self.fileData.header)
+        for row, line in enumerate(self.fileData.data):
             for column, item in enumerate(line):
                 qtwitem = QTableWidgetItem(str(item))
                 self.tw.setItem(row, column, qtwitem)
@@ -272,21 +271,31 @@ class TableWidget(QWidget):
         if index == -1:
             return
         self.tw.horizontalHeader().setSectionHidden(index, True)
-        self.m.addAction(self.headerLabels[index],
+        self.m.addAction(self.fileData.header[index],
                          partial(self.show_column, index))
-        if self.tw.horizontalHeader().hiddenSectionCount() == self.ncol:
+        ncol = self.fileData.ncol
+        if self.tw.horizontalHeader().hiddenSectionCount() == ncol:
             self.btnRemove.setEnabled(False)
 
     def show_column(self, index):
         self.btnRemove.setEnabled(True)
         self.tw.horizontalHeader().setSectionHidden(index, False)
         self.m.clear()
-        for i in range(self.ncol):
+        for i in range(self.fileData.ncol):
             if self.tw.horizontalHeader().isSectionHidden(i):
-                self.m.addAction(self.headerLabels[i],
+                self.m.addAction(self.fileData.header[i],
                                  partial(self.show_column, i))
         if not self.tw.horizontalHeader().hiddenSectionCount():
             self.btnUndelete.setEnabled(False)
+
+
+class FileData:
+
+    def __init__(self, header=[], data=set()):
+        self.header = header
+        self.data = data
+        self.ncol = len(header)
+        self.nrow = len(data)
 
 
 if __name__ == '__main__':
