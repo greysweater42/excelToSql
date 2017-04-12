@@ -25,7 +25,6 @@ class MainWidget(QWidget):
         self.twTables.setHeaderLabels(["tabele", "typ danych"])
 
         path = "/home/tomek/Documents/nauka/python/excelToSql/data.csv"
-
         self.leFileName = QLineEditUrl("lokalizacja pliku", path)
         self.btnOpenFile = QPushButton("...")
         self.btnOpenFile.clicked.connect(self.show_file_dialog)
@@ -134,11 +133,12 @@ class MainWidget(QWidget):
             self.popups[-1].show()
 
     def send_file_data(self):
-        self.dataSender.db = self.cbxODBCName.currentText()
-        index = self.twTables.selectedIndexes()[0]
-        self.dataSender.dbtable = index.data()
-        self.dataSender.fileData = self.fileData
-        self.dataSender.start()
+        db = self.cbxODBCName.currentText()
+        dbtable = self.twTables.selectedIndexes()[0].data()
+        fileData = self.fileData
+        self.popups.append(PopupSendData(db, dbtable, fileData))
+        self.popups[-1].show()
+        self.popups[-1].dataSender.start()
 
 
 class AutoVivification(dict):
@@ -200,10 +200,27 @@ class PopupError(QWidget):
         layout.addWidget(btn)
 
 
+class PopupSendData(QWidget):
+
+    def __init__(self, db, dbtable, fileData):
+        super(PopupSendData, self).__init__()
+        self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
+        self.resize(300, 100)
+        self.setWindowTitle(r"Wysyłanie danych")
+        self.dataSender = DataSender(self)
+        self.dataSender.db = db
+        self.dataSender.dbtable = dbtable
+        self.dataSender.fileData = fileData
+        self.lblCount = QLabel()
+        lt = QVBoxLayout(self)
+        lt.addWidget(self.lblCount)
+
+
 class DataSender(QThread):
 
     def __init__(self, parent=None):
         super(DataSender, self).__init__(parent)
+        self.parent = parent
         self.db = ""
         self.dbtable = ""
         self.fileData = FileData()
@@ -223,10 +240,11 @@ class DataSender(QThread):
                     sql = sql % row
                     if not count % 50 or count == self.fileData.nrow - 1:
                         sql = sql[:-1] + ";"
-                        print(sql)
                         cursor.execute(sql)
                         connection.commit()
                         sql = "insert into " + self.dbtable + " values "
+                        text = "Wysłano " + str(count + 1) + " wierszy."
+                        self.parent.lblCount.setText(text)
 
         except (pymysql.err.InternalError, pymysql.err.OperationalError) as err:
             self.popups.append(PopupError(error_message=str(err)))
