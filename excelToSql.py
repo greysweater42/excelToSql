@@ -59,8 +59,11 @@ class MainWidget(QWidget):
         gbFile.setLayout(gbFileLayout)
 
         mainLayout = QHBoxLayout(self)
-        mainLayout.addWidget(gbDB)
-        mainLayout.addWidget(gbFile)
+        mainSplitter = QSplitter()
+        mainSplitter.addWidget(gbDB)
+        mainSplitter.addWidget(gbFile)
+        mainSplitter.setStretchFactor(1, 3)
+        mainLayout.addWidget(mainSplitter)
 
         self.read_settings()
         self.dataSender = DataSender(self)
