@@ -4,7 +4,8 @@ import sys
 import csv
 import pandas as pd
 import os
-import pymysql.cursors
+import pymysql
+import pyodbc
 from PyQt5.QtWidgets import *
 from PyQt5.QtCore import Qt, QThread
 from functools import partial
@@ -66,7 +67,6 @@ class MainWidget(QWidget):
         mainLayout.addWidget(mainSplitter)
 
         self.read_settings()
-        self.dataSender = DataSender(self)
 
     def read_settings(self):
         try:
@@ -83,29 +83,39 @@ class MainWidget(QWidget):
 
     def get_tables_list(self):
         """
-        pobiera listę tabel ze wskazanej bazy danych
+        pobiera listę tabel z bazy danych odpowiedniej dla systemu operacyjnego
         """
         self.twTables.clear()
         db = self.cbxODBCName.currentText()
         try:
-            connection = pymysql.connect(host='localhost',
-                                         user='tomek',
-                                         password='haslo',
-                                         db=db,
-                                         charset='utf8mb4',
-                                         cursorclass=pymysql.cursors.DictCursor)
+            connection = db_connect(db)
             with connection.cursor() as cursor:
-                sql = """
-                SELECT table_name, column_name, data_type
-                from information_schema.columns
-                where table_schema='MIS';"""
+                if sys.platform in ('linux', 'linux2'):
+                    sql = """
+                    SELECT table_name, column_name, data_type
+                    from information_schema.columns
+                    where table_schema='MIS';"""
+                elif sys.platform == 'win32':
+                    sql = """
+                    select tbl.name table_name,
+                    col.name column_name,
+                    tp.name data_type
+                    from sys.tables tbl
+                    join sys.columns col on tbl.object_id = col.object_id
+                    join sys.types tp on col.user_type_id = tp.user_type_id
+                    where tbl.type_desc like 'user_table'
+                    """
                 cursor.execute(sql)
-                cur_result = cursor.fetchall()
-                full_set = {tuple([item['table_name'], item['column_name'],
-                                   item['data_type']]) for item in cur_result}
+                full_set = cursor.fetchall()
+                if sys.platform in ('linux', 'linux2'):
+                    full_set = {tuple([item['table_name'], item['column_name'],
+                                       item['data_type']]) for item in full_set}
+                elif sys.platform == 'win32':
+                    full_set = {tuple(item) for item in full_set}
                 result = AutoVivification()
                 for item in full_set:
                     result[item[0]][item[1]] = item[2]
+                print(result)
                 for table in result:
                     table_item = QTreeWidgetItem([table])
                     for column in result[table]:
@@ -114,7 +124,8 @@ class MainWidget(QWidget):
                         column_child.setDisabled(True)
                         table_item.addChild(column_child)
                     self.twTables.addTopLevelItem(table_item)
-        except (pymysql.err.InternalError, pymysql.err.OperationalError) as err:
+        except (pymysql.err.InternalError, pymysql.err.OperationalError,
+                pyodbc.OperationalError, pyodbc.Error, OSError) as err:
             self.popups.append(PopupError(error_message=str(err)))
             self.popups[-1].show()
         else:
@@ -265,15 +276,11 @@ class DataSender(QThread):
         self.dbtable = ""
         self.fileData = FileData()
         self.sheet = ""
+        self.popups = []
 
     def run(self):
-        connection = pymysql.connect(host='localhost',
-                                     user='tomek',
-                                     password='haslo',
-                                     db=self.db,
-                                     charset='utf8mb4',
-                                     cursorclass=pymysql.cursors.DictCursor)
         try:
+            connection = db_connect(self.db)
             with connection.cursor() as cursor:
                 sql = "insert into " + self.dbtable + " values "
                 for count, row in enumerate(self.fileData.data[self.sheet]):
@@ -288,7 +295,8 @@ class DataSender(QThread):
                         sql = "insert into " + self.dbtable + " values "
                         text = "Wysłano " + str(count + 1) + " wierszy."
                         self.parent.lblCount.setText(text)
-        except (pymysql.err.InternalError, pymysql.err.OperationalError) as err:
+        except (pymysql.err.InternalError, pymysql.err.OperationalError,
+                pyodbc.OperationalError, pyodbc.Error, OSError) as err:
             self.popups.append(PopupError(error_message=str(err)))
             self.popups[-1].show()
         else:
@@ -366,6 +374,21 @@ class FileData:
         self.header = dict()
         self.ncol = dict()
         self.nrow = dict()
+
+
+def db_connect(db):
+    if sys.platform in ('linux', 'linux2'):
+        connection = pymysql.connect(host='localhost',
+                                     user='tomek',
+                                     password='haslo',
+                                     db=db,
+                                     charset='utf8mb4',
+                                     cursorclass=pymysql.cursors.DictCursor)
+        return connection
+    elif sys.platform == 'win32':
+        return pyodbc.connect('DSN=%s' % db)
+    else:
+        raise OSError('Nieznany system operacyjny')
 
 
 if __name__ == '__main__':
